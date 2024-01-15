@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Create an empty error file with elevated privileges
+ERROR_FILE="/var/log/security_errors.log"
+sudo touch $ERROR_FILE
+
+# Redirect output and errors to a log file
+LOG_FILE="/var/log/security_checks.log"
+exec > >(tee -a $LOG_FILE) 2> >(tee -a $ERROR_FILE >&2)
+
+# Exit on error
+set -e
+
+# Target IP
+TARGET_IP="000.0.00.000"  # Replace with your actual target IP
+
+# Update system
+sudo apt-get update -y && sudo apt-get upgrade -y
+
+# Run Logcheck before updates
+sudo -u logcheck logcheck -o -t
+
+# Run Nmap scan before updates
+nmap -sV "$TARGET_IP"
+
+# Run OpenVAS scan
+if [ -n "$TARGET_IP" ]; then
+    openvas-cli --host="$TARGET_IP" --port=9390 --user=<Your_OpenVAS_User> --password=<Your_OpenVAS_Password> --xml=<Output_File_Path>
+else
+    echo "Target IP not specified. Skipping OpenVAS scan."
+fi
+
+# Run Logcheck after updates
+sudo -u logcheck logcheck -o -t
+
+# Optionally, categorize errors in a separate file
+if [ -s "$ERROR_FILE" ]; then
+    echo "=== Categorized Errors ===" >> "$ERROR_FILE"
+    # Add your categorization logic here
+    # Example: grep for specific keywords and categorize
+    grep "permission denied" "$ERROR_FILE" >> "/var/log/permission_errors.log"
+    grep "connection refused" "$ERROR_FILE" >> "/var/log/connection_errors.log"
+    # Add more categories as needed
+fi
+
